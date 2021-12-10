@@ -46,92 +46,303 @@ class_diag <- function(score, truth, positive, cutoff=.5){
 
 # Mining, Classification, Prediction
 
-## Name and EID here
+## Shriman Sonti sps2759
 
 ### Introduction 
 
 Paragraph or two introducing your datasets and variables, why they are interesting to you, etc. See instructions for more information
-
+*These datasets are from the first project from the NFL website where they have breakdowns of every position and their statistics, I realized after the first assignment that I didn't get too in depth into the datasets. This project, I feel, will allow me to understand these data sets more and play with them to find more similarities and differences. Again, just like the first project, I am a very big fan of football and I love statistics. Combining these two ideas and coming upon conclusions that I can understand and possibly use is very pleasurable. These two data sets include the rushing leaders from the 2019 and 2020 NFL year, it also includes touchdowns, yards, attempts, catching yards, and yards per attempt, etc.. Each of the variables are measuring some aspect of a running back's game, it means that whenever they ran the ball, caught the ball, or scored a touchdown it was marked in a big dataset. I added a loop to run through the names of each dataset so that I could differentiate the statistics for each player per year. I also had to create a binary variable which tells if a rusher has a yards per attempt of over 3. This would mean that they can get a first down in 3 tries meaning they are an efficient runner. The data set currently has 114 running backs of which there are 85 efficient rushers and 29 inefficient rushers. *
 ```{R}
 library(tidyverse)
 # read your datasets in here, e.g., with read_csv()
 
-# if your dataset needs tidying, do so here
+#Adjusting data set and dropping columns that aren't important for 2019 and 2020
+data2019 <- read_csv("2019 Rushing.csv")
+for(i in colnames(data2019))
+{
+  if(i != "Player")
+  {
+    names(data2019)[names(data2019) == i] <- paste(i, ".2019", sep = "")
+  }
+}
+data2020 <- read_csv("2020 Rushing.csv")
+for(i in colnames(data2020))
+{
+  if(i != "Player")
+  {
+    names(data2020)[names(data2020) == i] <- paste(i, ".2020", sep="")
+  }
+}
 
-# any other code here
+#combining dataset
+fulldata <- data2019 %>% full_join(data2020, by = c("Player")) %>% relocate(Rank.2020, .after = "Rank.2019")
+
+
+#creating a binary variable using the yards and attempts columns for both 2019 and 2020
+fulldata <- fulldata %>% mutate(yardsperattempt = ifelse((((YDS.2019/ATT.2019) + (YDS.2020/ATT.2020)) / 2 >= 3.4), "Efficient", "Inefficient"))
+
+head(fulldata)
+
+
 ```
 
 ### Cluster Analysis
 
 ```{R}
 library(cluster)
+library(GGally)
+set.seed(322)
 # clustering code here
+
+#slicing top 30 running backs for cardinality
+#Also top 30 running backs have more discernable statistics
+full2019data <- fulldata %>% select("YDS.2020", "TD.2020", "FPTS.2020", "REC.2020", "G.2020") %>% slice(1:30)
+
+#Used to figure out which k value is best for PAM clustering
+sil_width <- vector()
+for(i in 2:10)
+{
+  kms <- kmeans(full2019data, i)
+  sil <- silhouette(kms$cluster, dist(full2019data))
+  sil_width[i] <- mean(sil[,3])
+}
+#best number of clusters is 2
+
+#PAM clustering and ggpairs to visualize all of the columns 
+nflcluster <- full2019data %>% pam(2)
+full2019data %>% mutate(cluster = as.factor(nflcluster$clustering)) %>%
+  ggpairs(columns = 1:5, aes(color = cluster), cardinality_threshold = 30)
+
+  
 ```
 
 Discussion of clustering here
-    
+*This clustering was a comparison of a few of the metrics within the 2020 nfl rushing leaders season. As we can see there are many comparisons between specific metrics. Through the variables we can see that there are two clusters, the blue cluster are the elite running backs. The running backs where teams are built around them, who run the ball for over 1000 yards and have somewhat over 10 touchdowns. Think more run heavy offenses. While the red clusters, are running backs within a pass first offensive scheme. Where they don't get to run the ball as much but they'll have a decent amount of receptions. This offense normally has an elite quarterback who can throw the ball. For example, a blue dot would be Derrick Henry of the Tennessee Titans who ran for over 2000 yards and has a mediocre quarterback. This means that they are a run first offense. On the other hand, a red dot would be someone like Leonard Fournette of the Tampa Bay Buccaneers who have Tom Brady as their quarterback. They have an elite quarterback that can throw that ball, therefore running the ball is a second option to Tom Brady's arm. The average silhouette width is 0.62 which is a pretty reasonable cluster solution and a reasonable structure that has been found. *
+*Some of the interesting things I saw was that in almost every case, the blue cluster outclassed the red cluster. Blue was always on the right side of red with very few reds doing better than blue. This is surprising because it shows the division between the offenses in the league. Run heavy offenses really utilize their running backs and they're considered the playmaker of the team. They're the ones that opposing defenses have to worry about and they're the ones that can cause damage. While the red dots (pass heavy offenses) don't really utilize the run game as much. If anything they're not the real playmaker of the team, they're just an option for the quarterback. When they run the ball they're not as efficient, however, they are an extra blocker for the elite quarterback and an extra reciever for the quarterback to throw to. Either way, the running back is one of the most utilized positions, it depends on the coach and the quarterback to determine their utility.*
     
 ### Dimensionality Reduction with PCA
 
 ```{R}
 # PCA code here
+#cutting 2019 data into 4 columns
+data2019cut <- data2019 %>% select("YDS.2019", "ATT.2019", "TD.2019", "REC.2019")
+
+#Getting PCA and finding which PC's I should keep
+nfl2019pca <- princomp(na.omit(data2019cut), cor = T )
+nfl19df <- data.frame(PC1 = nfl2019pca$scores[ ,1], PC2 = nfl2019pca$scores[ ,2], PC3 = nfl2019pca$scores[, 3])
+
+#Keeping PC1, PC2, and PC3, and graphing them against one another.
+ggplot(nfl19df, aes(PC1, PC2)) + geom_point()
+ggplot(nfl19df, aes(PC1, PC3)) + geom_point()
+ggplot(nfl19df, aes(PC2, PC3)) + geom_point()
+
 ```
 
-Discussions of PCA here. 
+
+*I decided to retain PC1, PC2, and PC3, PC1 is an overall axis. Meaning that all of the coefficients are near each other and a player is better when their overall score is higher. The PC2 axis is a rushing vs passing axis. Meaning if a player has more rushing yards, attempts, and touchdowns then it means that they are part of a run heavy offense and that they will score higher. On the other hand, if a player scores lower on the PC2 axis that means they were part of a pass heavy offense and has more receptions than yards. PC3 is a comparison between yards and attempts to touchdowns and receptions. If a player scores higher here it means that they had more yards and attempts which means they ran the ball more. If a player scores lower it means that they had more catches and touchdowns, which means that they were a running back specifically used for catching and short distance touchdowns(i.e. inside the opponents 20 yard line). The PC1 and PC2 comparison is just as I thought, most of the dots are more towards the left end of PC1 and towards the middle of PC2. This means that overall about half of the running backs were pretty mediocre, and the other half are spread throughout the PC1. However, noticing a few of the outliers within the graph is interesting. There is one running back who is way above everyone else on the PC2 axis which means that they were a pretty solid running backbut they didn't have nearly any catches. All they did was run the ball. This is Derrick Henry, the number one running back in the league. The other outlier who is way far right on the PC1 axis and is down low on the PC2 axis is a running back named Alvin Kamara. A dual threat running back who plays for the New Orleans Saints, he has top 5 rushing yards in the league and top 2 receptions in the league out of any running back. The PC1 and PC3 graph is about the same as the PC1 and PC2 graph, however, if a player is lower on the PC3 graph it means that they caught the ball more and scored more touchdowns. We can see that there are a decent amount of players scored low on the PC3 axis, which means that most of their utility came from scoring from a close distance. Finally the PC2 and PC3 axis has a very centered spread. This makes sense as both axis' have higher scores when a player has more yards and attempts, however, in PC2 a player will have a higher score if they have more touchdowns as well. Whereas PC3 a players will have a lower score if they have more touchdowns.*
+*PC1 takes up 0.8525 or 85% of the total variance which makes sense because it's a overall players statistics axis. So most of the variance will be in this axis. PC2 holds 0.1077 or 10.77% of the axis which again makes sense as it's a comparison of yards, attempts, and touchdowns to receptions. PC3 takes up 0.0372 or 3.72%. Overall the the variance of the retained PC's is about 0.997 or 99.7% of the total variance. This means that there are 3 PC's that account for about 99.7% of the total variance.*
 
 ###  Linear Classifier
 
 ```{R}
 # linear classifier code here
+#removing all categorical variables and omitting na's
+fulldatavalues <-fulldata %>% select(-c("Rank.2019", "Rank.2020", "Player", "ROST.2020")) %>% na.omit()
+
+
+#selecting only 10 columns to predict off of 
+fulldatavalues <- fulldatavalues %>% select(c("YDS.2019", "YDS.2020", "TD.2019", "TD.2020", "ATT.2019", "ATT.2020", "REC.2019", "REC.2020", "FPTS.2019", "FPTS.2020", "yardsperattempt"))
+
+#Setting true case to efficient and using that to predict against entire dataset
+fit <- glm(yardsperattempt == "Efficient"~., data = fulldatavalues, family = "binomial")  
+score <- predict(fit, type = "response")
+class_diag(score, truth = fulldatavalues$yardsperattempt, positive = "Efficient")
+
+
+#creating confusion matrix
+#x is mean of yards per attempt per player per year (calculation)
+x <- ((fulldatavalues$YDS.2019/fulldatavalues$ATT.2019) + (fulldatavalues$YDS.2020/fulldatavalues$ATT.2020)) / 2
+#fulldatavalues yards per attempt (actual data set)
+y <- fulldatavalues$yardsperattempt
+y <- factor(y, levels = c("Efficient", "Inefficient"))
+
+#checking if runner is efficient or not
+y_hat <- ifelse(x > 3, "Efficient", "Inefficient")
+
+y_hat <- factor(y_hat, levels = c("Efficient", "Inefficient"))
+
+#confusion matrix
+table(actual = y, predicted = y_hat) %>% addmargins
+
 ```
 
 ```{R}
 # cross-validation of linear classifier here
+set.seed(1234)
+k=10 #choose number of folds
+
+
+data<- fulldatavalues[sample(nrow(fulldatavalues)),] #randomly order rows
+folds<-cut(seq(1:nrow(fulldatavalues)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  ## Create training and test sets
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$yardsperattempt ## Truth labels for fold i
+  ## Train model on training set (all but fold i)
+  fit<-glm(yardsperattempt == "Efficient"~.,data=train,family="binomial")
+  ## Test model on test set (fold i) 
+  probs<-predict(fit,newdata = test,type="response")
+  ## Get diagnostics for fold i
+  diags<-rbind(diags,class_diag(probs,truth, positive="Efficient"))
+}
+summarize_all(diags,mean)
 ```
 
 Discussion here
+*Note: I chose 3 as my value to base and efficient or inefficient runner because a team gets three chances to get 10 yards and get a reset of chances, if a team goes over 3 chances and they haven't gotten 10 yards they have to give the ball to the other team. If a running back averages more than 3 yards per carry, it means that it'll take them on average 3 attempts to get a reset. Which is the exact amount of chances they have, making them an efficient runner. *
+
+*When training the model to the entire dataset we get quite a few metrics. For example, our sensitivity(True Positive Rate), specificity (True negative rate), and precision are all very high. Hovering within the 80s and 90s. This means that most of the players who are efficient are rated as efficient (postives) and most of the players who are predicted inefficient are classified correctly(negatives). Our precision is also high at 0.9419 which means that most of the predicted positive cases are actually positive. Another metric, our f1 score, is also pretty high. About the same as Sensitivity and Precision the f1 score is the harmonic mean of both metrics. It's a single number that tells us how well our prediction is classifying, and from what I can interpret, a 0.9474 is pretty good for our metrics. Finally the AUC(Area under the curve) is very good at 0.9663. This means that there is a 96.63% chance that a player will be distinguished correctly between an efficient and inefficient rusher through all the metrics and data. There is also a confusion matrix that has been created. There are two classifications, Efficient and Inefficient in the predicted and actual category. There are 85 Efficient predicted and Efficient actual, which makes sense. If a player is an efficient rusher then it's most likely going to be predicted that they're an efficient rusher. There is Inefficient actual and predicted, which again make sense as those players are put into their respective category correctly. There is Inefficent actual and Efficient predicted, which means that running back was predicted to be an efficient rusher who could get a first down in 3 tries but in actuality they are actually inefficient and can't get 3 yards on per rush. This could be for many reasons, but the three biggest reasons are that the quarterback improved over the offseason which turned the offense into a pass first, a head coach change which again could change the way the offense is played, or a new stellar rookie quarterback is starting which means that there isn't as big a need to rely on the running back. Finally there is Inefficient predicted and Efficient actual which is 0. This means that the algorithm based on the data didn't predict any rushers to be inefficent and because of their stats they were efficient. So the algorithm was pretty spot on in determining inefficient running backs.*
+*As we can see when we do the K-fold CV classification on the data, all of the metrics go down except the specificity. This means that the TNR goes up, the rate at which the algorithm predicts inefficient and the actual data says inefficient. So this model is very good at predicting inefficient players. Everything else, however, decreased which means the model isn't amazing at predicting unseen data. The AUC decreased as well which means that there are signs of overfitting, where the model fits very closely to it's training data. However, it's not a big decrease, it's a matter of 7.5%. *
+
 
 ### Non-Parametric Classifier
 
 ```{R}
 library(caret)
 # non-parametric classifier code here
+
+knn_fit <- knn3(yardsperattempt == "Efficient"~ ., data = fulldatavalues, k = 5)
+
+y_hat_knn <- predict(knn_fit, fulldatavalues)
+
+class_diag(y_hat_knn[,2],fulldatavalues$yardsperattempt, positive="Efficient")
+
+
+#Confusion matrix
+x <- ((fulldatavalues$YDS.2019/fulldatavalues$ATT.2019) + (fulldatavalues$YDS.2020/fulldatavalues$ATT.2020)) / 2
+y <- fulldatavalues$yardsperattempt
+y <- factor(y, levels = c("Efficient", "Inefficient"))
+
+y_hat <- ifelse(x > 3, "Efficient", "Inefficient")
+
+y_hat <- factor(y_hat, levels = c("Efficient", "Inefficient"))
+
+table(actual = y, predicted = y_hat) %>% addmargins
+
 ```
 
 ```{R}
 # cross-validation of np classifier here
+
+set.seed(1234)
+k=10 #choose number of folds
+data<-fulldatavalues[sample(nrow(fulldatavalues)),] #randomly order rows
+folds<-cut(seq(1:nrow(fulldatavalues)),breaks=k,labels=F) #create 10 folds
+diags<-NULL
+for(i in 1:k){
+  ## Create training and test sets
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$yardsperattempt
+  ## Train model on training set
+  fit<-knn3(yardsperattempt~.,data=train)
+  probs<-predict(fit,newdata = test)[,1]
+  ## Test model on test set (save all k results)
+  diags<-rbind(diags,class_diag(probs,truth, positive="Efficient"))
+}
+summarize_all(diags,mean)
 ```
 
 Discussion
+
+*When training this model to the entire dataset with kNN instead of glm we get quite a few metrics. Our sensitivity(TPR) is quite high which means that classification is happening correctly when finding if a running back is actually an efficient runner. However, a metric that changes is the specificity(TNR), which means the opposite of TPR. In that, it's not very good at predicting when a player is actually an inefficient runner. Interesting how the data didn't change and yet there is a drastic difference in the true negative rate. All other metrics seem to be doing pretty average, not amazing but they're what I expected. Decent precision, decent f1, and decent ba. The AUC is doing pretty well with it being 0.927. Through kNN, there is approximately a 93% chance that a player will be correctly distinguished between an efficient and inefficient rusher through all the metrics and data. However, when it comes to measuring against the glm test, we can see that kNN is slightly worse with glm AUC being at 96% and kNN AUC being at 93%. The confusion matrix is the same as the glm with the exact same numbers, so our discussion from the linear classifer can be applied here.*
+*When doing the cross validation with kNN we can see again the metrics are comparably to that of the model when trained to the entire dataset. Most of the metrics are floating around the same area except specificity, which is showing a 0.46667. Which is a whole 0.2 down from the entire dataset model. This is subpar, as this means per k-fold the algorithm is predicting about a 0.5 TNR rate. A 50% chance that the data will correctly predict inefficient rushers. This new model is predicting new observations per CV AUC pretty well at 0.85. Meaning that there's an 85% chance that each fold will correctly distinguish an efficient and inefficient player. However, the CV AUC is lower than that of the entire dataset AUC which means that there are signs of overfitting in the data, the model might be fitting too close to it's training data. The nonparametric model is just slightly lower than the linear model in cross validation performance. The AUC in the nonparametric model is 0.85 and the linear is 0.87. Most of the metrics in the linear model are closer together and most of them are higher than the nonparametric counterparts. However, the sensitivity in nonparametric is higher than linear and the specificity in linear is much higher than nonparametric. While the linear model does barely edge out the nonparametric model, overall both models are outstanding and a scientist can't go wrong using either one of them.*
 
 
 ### Regression/Numeric Prediction
 
 ```{R}
 # regression model code here
+#fitting TD.2020 to rest of dataset
+fit <- lm(TD.2020~., data = fulldatavalues)
+yhat <- predict(fit)
+
+#MSE
+mean((fulldatavalues$TD.2020-yhat)^2)
 ```
 
 ```{R}
 # cross-validation of regression model here
+
+set.seed(1234)
+k=5 #choose number of folds
+data<-fulldatavalues[sample(nrow(fulldatavalues)),] #randomly order rows
+folds<-cut(seq(1:nrow(fulldatavalues)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,]
+  test<-data[folds==i,]
+  ## Fit linear regression model to training set
+  fit<-lm(TD.2020~.,data=train)
+  ## Get predictions/y-hats on test set (fold i)
+  yhat<-predict(fit,newdata=test)
+  ## Compute prediction error  (MSE) for fold i
+  diags<-mean((test$TD.2020-yhat)^2) 
+}
+mean(diags) ## get average MSE across all folds (much higher error)!
 ```
 
-Discussion
+*For the linear regression model I predicted the TD.2020 column, which is the amount of rushing touchdowns a running back scored in 2020 to the rest of the dataset which is about 10 more columns. When calculating the MSE for the overall dataset we get a small 0.84 which means the average squared difference between the estimated and actual values is actually quite small. When doing the MSE in CV we get 1.31 which is higher, which means that there are signs of overfitting. However, the MSE is still quite small, which means that overall the CV isn't terrible.*
 
 ### Python 
 
 ```{R}
 library(reticulate)
+use_python("/usr/bin/python3")
+TDS <-fulldatavalues %>% select(c("TD.2020", "TD.2019"))
 ```
 
 ```{python}
 # python code here
+
+#r to python
+mean2019 = r.TDS['TD.2019'].mean()
+mean2019
+median2019 = r.TDS['TD.2019'].median()
+median2019
+mean2020 = r.TDS['TD.2020'].mean()
+mean2020
+median2020 = r.TDS['TD.2020'].median()
+median2020
+
+
+
+#creating new dataframe from r to send to python
+FPTSData = r.fulldatavalues[["FPTS.2019", "FPTS.2020"]]
+FPTSData.head()
+
+
+
+
+
 ```
 
-Discussion
+```{r}
+#python to r
+mean(py$FPTSData$FPTS.2019) 
+median(py$FPTSData$FPTS.2019)
+mean(py$FPTSData$FPTS.2020) 
+median(py$FPTSData$FPTS.2020)
+```
+
+
+*I created a TDS dataset so that I could access it in R using the 'r.' function, and with that I found the means and medians of the respective years in python. I then created a dataframe in python of fantasy points so that in R I could use the 'py$' method and find the means and medians of those respective years in R.*
 
 ### Concluding Remarks
 
-Include concluding remarks here, if any
+*I decided to use the same dataset from the first project in this one, only because I wanted to get more in depth with it. I realized that I would rather get really acquainted with one dataset than have two completely separate datasets floating around. Plus with this there's a direct comparison between both projects, and it shows my skills as a data science student has increased. This dataset allowed me to get into the nitty-gritty of data science with bits of machine learning and training models, which will inevitably be the future of programming. It was very interesting to see many of the similarities between running backs and it was also interesting to see how the algorithms would classify and even be able to predict how well a running back is doing based on previous years and comparisons to other running backs. Overall, there wasn't a specific goal I was trying to get to when doing these observations, I was just curious to see how these new algorithms I learned would affect the data I was already acquaintanced with. Football has vast amounts of data to analyze and make conclusions off of, this is only a small world in a large universe, and I hope to continue these types of exploratory projects and observations into data science alongside the world of sports.*
 
 
 
